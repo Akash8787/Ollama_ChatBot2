@@ -8,6 +8,10 @@ app = Flask(__name__)
 # Configure logging
 logging.basicConfig(level=logging.ERROR)
 
+@app.route("/")
+def helloworld():
+    return "Hello World!"
+
 @app.route('/extract_pdf_pages', methods=['POST'])
 def extract_pdf_pages():
     data = request.get_json(force=True)
