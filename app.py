@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 import base64
-import pymupdf  # PyMuPDF (also known as fitz)
+import pymupdf
 import logging
 
 app = Flask(__name__)
