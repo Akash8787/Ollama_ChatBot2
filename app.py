@@ -27,11 +27,33 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 llm = Ollama(base_url="http://localhost:11434", model="llama3.1")
 conversation_history = {}
 
+# prompt = ChatPromptTemplate.from_template(
+#     """
+#     Answer questions using only the provided context and conversation history.
+#     If the question is unrelated to the context, say: "Please ask questions related to our Company."
+#     Limit responses to 50 words or fewer.
+#     For greetings or non-questions, give a short, friendly reply.
+#     <context>
+#     {context}
+#     </context>
+#     <history>
+#     {history}
+#     </history>
+#     Question: {input}
+   
+#     """
+# )
+
 prompt = ChatPromptTemplate.from_template(
     """
-    Answer questions using only the provided context and conversation history.
-    If the question is unrelated to the context, say: "Please ask questions related to our Company."
-    Limit responses to 50 words or fewer.
+    Answer questions using only the provided context and conversation history:
+    - Please provide the most relevant response in no more than 50 words
+    If the question is unrelated to the context but can be answered with general knowledge:
+    - Present information assertively without hedging phrases
+    - Use formal but accessible language
+    - Include relevant dates/terms of service
+    - Maintain neutral tone
+    Please provide the most relevant response in no more than 50 words.
     For greetings or non-questions, give a short, friendly reply.
     <context>
     {context}
@@ -40,9 +62,13 @@ prompt = ChatPromptTemplate.from_template(
     {history}
     </history>
     Question: {input}
-   
     """
 )
+ 
+
+
+
+
 
 class LocalEmbeddings(Embeddings):
     def __init__(self, model_name: str = "all-MiniLM-L12-v2"):
