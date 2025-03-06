@@ -43,7 +43,6 @@ conversation_history = {}
    
 #     """
 # )
-
 prompt = ChatPromptTemplate.from_template(
     """
     Answer questions using only the provided context and conversation history:
