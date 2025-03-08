@@ -13,7 +13,6 @@ import os
 import logging
 import base64
 from flask_cors import CORS
-from multiprocessing import Pool
 
 # Flask app setup
 app = Flask(__name__)
@@ -22,28 +21,30 @@ CORS(app)
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-
 # Global settings
 llm = Ollama(base_url="http://localhost:11434", model="llama3.1")
-conversation_history = {}
+strict_conversation_history = {}  # Separate history for strict mode
+flexible_conversation_history = {}  # Separate history for flexible mode
 
-# prompt = ChatPromptTemplate.from_template(
-#     """
-#     Answer questions using only the provided context and conversation history.
-#     If the question is unrelated to the context, say: "Please ask questions related to our Company."
-#     Limit responses to 50 words or fewer.
-#     For greetings or non-questions, give a short, friendly reply.
-#     <context>
-#     {context}
-#     </context>
-#     <history>
-#     {history}
-#     </history>
-#     Question: {input}
-   
-#     """
-# )
-prompt = ChatPromptTemplate.from_template(
+# Prompts
+strict_prompt = ChatPromptTemplate.from_template(
+    """
+    Answer questions using only the provided context and conversation history.
+    If the question is unrelated to the context, respond with a brief apology text like I'm sorry, but I don't have information regarding that. and suggest exploring products/services. 
+    Keep off-topic responses at least 30 words, and avoid phrases like "documents" or "provided context" or "context".
+    Please provide the most relevant response in no more than 50 words.
+    For greetings or non-questions, give a short, friendly reply.
+    <context>
+    {context}
+    </context>
+    <history>
+    {history}
+    </history>
+    Question: {input}
+    """
+)
+
+flexible_prompt = ChatPromptTemplate.from_template(
     """
     Answer questions using only the provided context and conversation history:
     - Please provide the most relevant response in no more than 50 words
@@ -63,10 +64,6 @@ prompt = ChatPromptTemplate.from_template(
     Question: {input}
     """
 )
- 
-
-
-
 
 
 class LocalEmbeddings(Embeddings):
@@ -288,20 +285,26 @@ def delete_pdf():
             "message": f"Deletion process failed: {str(e)}"
         })
 
+
 @app.route('/ask_question', methods=['POST'])
 def ask_question():
     """
-    Handle question-answering requests by searching for the matching FAISS index.
+    Handle question-answering requests with isolated chat history per user_token.
     """
     data = request.get_json(force=True)
     user_code = data.get("User_Code")
     token = data.get("Token")
+    user_token = data.get("User_Token")  # Unique identifier for user session
+    use_external = data.get("Condition", False)
     question = data.get("question")
+    greeting = data.get("GreetingMessage")
+    
 
-    if not token:
+    # Validate required fields
+    if not all([user_code, token, user_token]):
         return jsonify({
             "status": "error",
-            "message": "Token is required",
+            "message": "User_Code, Token, and user_token are required",
             "answer": ""
         })
 
@@ -313,36 +316,32 @@ def ask_question():
         })
 
     # Determine the FAISS path
-    faiss_path = None
-
-    if user_code:
-        # Use the provided user_code path
-        potential_path = os.path.join("./clients", user_code, token, "faiss_index")
-        if os.path.exists(os.path.join(potential_path, "index.faiss")):
-            faiss_path = potential_path
-    else:
-        # Search for the token in all user_code directories
-        clients_dir = "./clients"
-        for user_folder in os.listdir(clients_dir):
-            potential_path = os.path.join(clients_dir, user_folder, token, "faiss_index")
-            if os.path.exists(os.path.join(potential_path, "index.faiss")):
-                faiss_path = potential_path
-                break  # Stop searching once a match is found
-
-    if not faiss_path:
+    faiss_path = os.path.join("./clients", user_code, token, "faiss_index")
+    if not os.path.exists(os.path.join(faiss_path, "index.faiss")):
         return jsonify({
             "status": "error",
-            "message": f"No FAISS index found for token: {token}",
+            "message": f"No FAISS index found for user {user_code}",
             "answer": ""
         })
 
     try:
-        # Retrieve or initialize conversation history for the token
-        if token not in conversation_history:
-            conversation_history[token] = []
+        # Create a unique session key
+        session_key = f"{user_code}_{token}_{user_token}"
+
+        # Select the appropriate conversation history based on the mode
+        if use_external:
+            history_dict = strict_conversation_history
+            current_prompt = strict_prompt
+        else:
+            history_dict = flexible_conversation_history
+            current_prompt = flexible_prompt
+
+        # Initialize history if needed
+        if session_key not in history_dict:
+            history_dict[session_key] = []
 
         # Get the current conversation history (last 2 interactions)
-        history = conversation_history[token][-2:]  # Only keep the last 2 interactions
+        history = history_dict[session_key][-2:]
 
         # Load embeddings and FAISS index
         embeddings = LocalEmbeddings(model_name="all-MiniLM-L6-v2")
@@ -361,7 +360,7 @@ def ask_question():
         }
 
         # Create and invoke the retrieval chain
-        document_chain = create_stuff_documents_chain(llm, prompt)
+        document_chain = create_stuff_documents_chain(llm, current_prompt)
         retrieval_chain = create_retrieval_chain(retriever, document_chain)
         response = retrieval_chain.invoke(input_data)
         answer = response.get('answer', "No answer found")
@@ -378,13 +377,13 @@ def ask_question():
             if answer.startswith(phrase):
                 answer = answer[len(phrase):].strip()
 
-        # Update conversation history
-        conversation_history[token].append(f"User: {question}")
-        conversation_history[token].append(f"Assistant: {answer}")
+        # Update the appropriate conversation history
+        history_dict[session_key].append(f"User: {question}")
+        history_dict[session_key].append(f"Assistant: {answer}")
 
         # Limit history to the last 10 interactions (optional)
-        if len(conversation_history[token]) > 10:
-            conversation_history[token] = conversation_history[token][-10:]
+        if len(history_dict[session_key]) > 10:
+            history_dict[session_key] = history_dict[session_key][-10:]
 
         return jsonify({
             "status": "success",
@@ -392,12 +391,13 @@ def ask_question():
             "answer": answer
         })
     except Exception as e:
-        logging.error(f"Error processing question for token {token}: {e}")
+        logging.error(f"Error processing question for session {session_key}: {e}")
         return jsonify({
             "status": "error",
             "message": "Failed to process the question",
             "answer": ""
         })
+
 
 if __name__ == '__main__':
     # Start Flask app
