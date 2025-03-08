@@ -26,13 +26,75 @@ llm = Ollama(base_url="http://localhost:11434", model="llama3.1")
 strict_conversation_history = {}  # Separate history for strict mode
 flexible_conversation_history = {}  # Separate history for flexible mode
 
-# Prompts
+# # Prompts
+# strict_prompt = ChatPromptTemplate.from_template(
+#     """
+#     Answer questions using only the provided context and conversation history.
+#     If the question is unrelated to the context, respond with a brief apology text like I'm sorry, but I don't have information regarding that. and suggest exploring products/services. 
+#     Keep off-topic responses at least 30 words, and avoid phrases like "documents" or "provided context" or "context".
+#     Please provide the most relevant response in no more than 50 words.
+#     For greetings or non-questions, give a short, friendly reply.
+#     <context>
+#     {context}
+#     </context>
+#     <history>
+#     {history}
+#     </history>
+#     Question: {input}
+#     """
+# )
+
+# flexible_prompt = ChatPromptTemplate.from_template(
+#     """
+#     Answer questions using only the provided context and conversation history:
+#     - Please provide the most relevant response in no more than 50 words
+#     If the question is unrelated to the context but can be answered with general knowledge:
+#     - Present information assertively without hedging phrases
+#     - Use formal but accessible language
+#     - Include relevant dates/terms of service
+#     - Maintain neutral tone
+#     Please provide the most relevant response in no more than 50 words.
+#     For greetings or non-questions, give a short, friendly reply.
+#     <context>
+#     {context}
+#     </context>
+#     <history>
+#     {history}
+#     </history>
+#     Question: {input}
+#     """
+# )
+
+
+
 strict_prompt = ChatPromptTemplate.from_template(
     """
-    Answer questions using only the provided context and conversation history.
-    If the question is unrelated to the context, respond with a brief apology text like I'm sorry, but I don't have information regarding that. and suggest exploring products/services. 
-    Keep off-topic responses at least 30 words, and avoid phrases like "documents" or "provided context" or "context".
-    Please provide the most relevant response in no more than 50 words.
+    Answer questions using only the provided context and conversation history:
+    - Please provide the most relevant response in no more than 50 words,encourage the user to ask further questions related to the context by adding: "Feel free to ask more about [specific topic/product/service]!"
+    If the question is unrelated to the context, respond with: "I'm sorry, but I don't have information regarding that. Could you ask something related to [specific topic/product/service]?"
+    - For greetings or non-questions, give a short, friendly reply.
+    - After providing an answer, encourage the user to ask further questions related to the context by adding: "Feel free to ask more about [specific topic/product/service]!"
+ 
+    <context>
+    {context}
+    </context>
+    <history>
+    {history}
+    </history>
+    Question: {input}
+    """
+)
+ 
+flexible_prompt = ChatPromptTemplate.from_template(
+    """
+    Answer questions using only the provided context and conversation history:
+    - Please provide the most relevant response in no more than 50 words,encourage the user to ask further questions related to the context by adding: "Feel free to ask more about [specific topic/product/service]!"
+    If the question is unrelated to the context but can be answered with general knowledge:
+    - Present information assertively without hedging phrases
+    - Use formal but accessible language
+    - Include relevant dates/terms of service
+    - Maintain neutral tone
+    -encourage the user to ask further questions related to the context by adding: "Feel free to ask more about [specific topic/product/service]!"
     For greetings or non-questions, give a short, friendly reply.
     <context>
     {context}
@@ -44,26 +106,10 @@ strict_prompt = ChatPromptTemplate.from_template(
     """
 )
 
-flexible_prompt = ChatPromptTemplate.from_template(
-    """
-    Answer questions using only the provided context and conversation history:
-    - Please provide the most relevant response in no more than 50 words
-    If the question is unrelated to the context but can be answered with general knowledge:
-    - Present information assertively without hedging phrases
-    - Use formal but accessible language
-    - Include relevant dates/terms of service
-    - Maintain neutral tone
-    Please provide the most relevant response in no more than 50 words.
-    For greetings or non-questions, give a short, friendly reply.
-    <context>
-    {context}
-    </context>
-    <history>
-    {history}
-    </history>
-    Question: {input}
-    """
-)
+
+
+
+
 
 
 class LocalEmbeddings(Embeddings):
