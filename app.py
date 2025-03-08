@@ -296,7 +296,7 @@ def ask_question():
     token = data.get("Token")
     user_token = data.get("User_Token")  # Unique identifier for user session
     use_external = data.get("Condition", False)
-    question = data.get("question")
+    question = data.get("Question")
     greeting = data.get("GreetingMessage")
     
 
