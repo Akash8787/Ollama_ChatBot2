@@ -13,11 +13,16 @@ import os
 import logging
 import base64
 from flask_cors import CORS
+from paddleocr import PaddleOCR
+import cv2
+import numpy as np
+import logging
+logging.getLogger('ppocr').setLevel(logging.ERROR)
 
 # Flask app setup
 app = Flask(__name__)
 CORS(app)
-
+ocr = PaddleOCR(use_angle_cls=True, lang="en", use_gpu=True)
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -444,6 +449,52 @@ def ask_question():
             "answer": ""
         })
 
+def decode_base64_image(base64_string):
+    """Convert base64 string to an OpenCV image."""
+    try:
+        image_data = base64.b64decode(base64_string)
+        image_np = np.frombuffer(image_data, np.uint8)
+        image = cv2.imdecode(image_np, cv2.IMREAD_COLOR)
+        return image
+    except Exception as e:
+        return None
+
+
+
+def perform_ocr(img):
+    """Perform OCR on the selected image and store bounding box information."""
+    ocr_results = ocr.ocr(img)
+    # print("ocr_Image:",ocr_results)
+    data = []
+    for line in ocr_results:
+ 
+        for word_info in line:
+            bbox = word_info[0]  # Bounding box coordinates
+            text = word_info[1][0]  # Extracted text
+            confidence = word_info[1][1]  # Confidence score
+            x, y, w, h = cv2.boundingRect(np.array(bbox, dtype=np.int32))
+            data.append((x, y, w, h, text, confidence))
+    # print("Data:",data)
+    return data
+
+
+@app.route("/ocr", methods=["POST"])
+def ocr_api():
+    """API endpoint for OCR using Base64 image input."""
+    data = request.json
+    if "image" not in data:
+        return jsonify({"error": "No image data provided"}), 400
+
+    base64_image = data["image"]
+    image = decode_base64_image(base64_image)
+
+    if image is None:
+        return jsonify({"error": "Invalid Base64 image"}), 400
+
+    # Perform OCR
+    ocr_results = perform_ocr(image)
+    # print("ocr_results:",ocr_results)
+    return ocr_results
 
 if __name__ == '__main__':
     # Start Flask app
